@@ -9,11 +9,9 @@ from talib import ULTOSC
 lowlevel = 30
 highlevel = 70
 midlevel = 50
-avg1 = 12
+avg1 = 7
 avg2 = 2*avg1
 avg3 = 2*avg2
-
-signalPath = './trading_signals'
 
 start_time = time(9,15)
 end_time = time(16)
@@ -55,52 +53,34 @@ class SampleEvtGenerator(EvtGenerator):
                 else:
                     # get timestamp of current ohlc
                     this_interval = self._ohlcv[md.productCode][0]
-                    if current_time.date() != this_interval.date():
-                        this_interval = datetime.combine(current_time.date(), start_time)
-                        next_interval = this_interval + timedelta(minutes = self.OHLCV_length)
-                        # find time interval of current_time
-                        # if current_time < earlist time interval, break
-                        # else create an entry in self._ohlcv for the productCode
-                        while True:
-                            if current_time >= this_interval and current_time < next_interval:
-                                self._ohlcv[md.productCode] = [
-                                    this_interval,
-                                    md.lastPrice,
-                                    md.lastPrice,
-                                    md.lastPrice,
-                                    md.lastPrice
-                                ]
-                                break
-                            elif current_time >= next_interval:
-                                this_interval = next_interval
-                                next_interval = this_interval + timedelta(minutes = self.OHLCV_length)
-                            else:
-                                break
+                    # if in the same time interval, update ohlcv
+                    if (current_time - this_interval).seconds < 60 * self.OHLCV_length:
+                        self._ohlcv[md.productCode] = [
+                            self._ohlcv[md.productCode][0], \
+                            self._ohlcv[md.productCode][1], \
+                            max(self._ohlcv[md.productCode][2], md.lastPrice), \
+                            min(self._ohlcv[md.productCode][3], md.lastPrice), \
+                            md.lastPrice
+                        ]
+                    # otherwise, reserve current ohlcv to _high, _low, _close dictionaries and update ohlcv to the currently growing one
                     else:
-                        # if in the same time interval, update ohlcv
-                        if (current_time - this_interval).seconds < 60 * self.OHLCV_length:
-                            self._ohlcv[md.productCode] = [
-                                self._ohlcv[md.productCode][0], \
-                                self._ohlcv[md.productCode][1], \
-                                max(self._ohlcv[md.productCode][2], md.lastPrice), \
-                                min(self._ohlcv[md.productCode][3], md.lastPrice), \
-                                md.lastPrice
-                            ]
-                        # otherwise, reserve current ohlcv to _high, _low, _close dictionaries and update ohlcv to the currently growing one
+                        print str(md.productCode) + ',' + self._ohlcv[md.productCode][0].strftime('%Y%m%d_%H%M%S')+ ',' + ','.join(map(str, self._ohlcv[md.productCode][1:]))
+
+                        if md.productCode not in self._high:
+                            self._high[md.productCode], self._low[md.productCode], self._close[md.productCode] = [],[],[]
                         else:
-                            print md.productCode, ' ', self._ohlcv[md.productCode][0].strftime('%Y%m%d_%H%M%S'), ' ', self._ohlcv[md.productCode][1:]
-                            if md.productCode not in self._high:
-                                self._high[md.productCode], self._low[md.productCode], self._close[md.productCode] = [],[],[]
-                            else:
-                                self._high[md.productCode].append(self._ohlcv[md.productCode][2])
-                                self._low[md.productCode].append(self._ohlcv[md.productCode][3])
-                                self._close[md.productCode].append(self._ohlcv[md.productCode][4])
-                            while len(self._high[md.productCode]) > avg3+1:
-                                del self._high[md.productCode][0]
-                                del self._low[md.productCode][0]
-                                del self._close[md.productCode][0]
-                            if len(self._high[md.productCode]) == avg3+1:
-                                self.calculateUO(md)
+                            self._high[md.productCode].append(self._ohlcv[md.productCode][2])
+                            self._low[md.productCode].append(self._ohlcv[md.productCode][3])
+                            self._close[md.productCode].append(self._ohlcv[md.productCode][4])
+                        while len(self._high[md.productCode]) > avg3+1:
+                            del self._high[md.productCode][0]
+                            del self._low[md.productCode][0]
+                            del self._close[md.productCode][0]
+                        if len(self._high[md.productCode]) == avg3+1:
+                            self.calculateUO(md)
+                        if current_time.time() == end_time:
+                            del self._ohlcv[md.productCode]
+                        else:
                             # find the new this interval
                             while True:
                                 this_interval += timedelta(minutes = self.OHLCV_length)
@@ -157,7 +137,7 @@ class SampleEvtGenerator(EvtGenerator):
                 self.buy_flag[product] = 0
             if product not in self.sell_flag:
                 self.sell_flag[product] = 0
-            print 'Product:', product,'  UO:', uo, '  buy flag:', self.buy_flag[product], '  sell flag:', self.sell_flag[product]
+            # print 'Product:', product,'  UO:', uo, '  buy flag:', self.buy_flag[product], '  sell flag:', self.sell_flag[product]
             # buy signal
             # step 1: the low of the Divergence should be below the lowlevel
             if self.buy_flag[product] == 0 and uo < lowlevel:
@@ -174,10 +154,14 @@ class SampleEvtGenerator(EvtGenerator):
             # step 3: UO breaks above the high of the Divergence
             if self.buy_flag[product] == 2:
                 if uo > self.uohigh_b[product]:
+                    '''
                     if product not in self.buy_signal:
                         self.buy_signal[product] = []
                     self.buy_signal[product].append([md.timestamp, 'b'])
-                    print 'Buy:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
+                    '''
+
+                    # print 'Buy:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
+                    print 'buy' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
                     self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
                                                     SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
 
@@ -220,12 +204,16 @@ class SampleEvtGenerator(EvtGenerator):
                 if self._high[product][-1] > self.price_s[product] and uo < self.uohigh_s[product] and uo < highlevel:
                     self.sell_flag[product] = 2
             # step 3: UO breaks below the low of the Divergence
-            if self.sell_flag == 2:
-                if uo < self.uolow_s:
+            if self.sell_flag[product] == 2:
+                if uo < self.uolow_s[product]:
+                    '''
                     if product not in self.sell_signal:
                         self.sell_signal[product] = []
                     self.sell_signal[product].append([md.timestamp, 's'])
-                    print 'Sell:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
+                    '''
+
+                    # print 'Sell:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
+                    print 'sell' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
                     self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
                                                     SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
 
@@ -255,28 +243,25 @@ class SampleEvtGenerator(EvtGenerator):
 
 
         def on_tradefeed(self, tf):
+
+                # ['__doc__', '__init__', '__module__', 'buySell', 'deleted', 'errorDescription', 'market', 'orderID', 'price', 'productCode', 'source', 'status', 'timestamp', 'tradeID', 'volume', 'volumeFilled']
                 print "tf:" + str(tf.price)
         
         def start(self):
                 print "SampleEvtGenerator.start()"
                 # time interval options: 1min, 5min, 15min
-                self.OHLCV_length = 5
-                self.timestamp = datetime(1995,1,1)
-                self.count = {}
+                self.OHLCV_length = 1
                 self._ohlcv = {}
                 self._high, self._low, self._close = {},{},{}
-                
 
                 # ------------- buy parameters -----------------
                 self.buy_flag = {}
                 self.uohigh_b, self.uolow_b, self.price_b = {}, {}, {}
-                self.buy_signal = {}
 
                 # ------------- sell parameters -----------------
                 self.sell_flag = {}
                 self.uohigh_s, self.uolow_s, self.price_s = {}, {}, {}
-                self.sell_signal = {}
+                
                 
                 #self._latest_md_price = {}
                 #self._latest_md_vol = {}
-
