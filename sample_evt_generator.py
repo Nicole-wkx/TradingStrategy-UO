@@ -1,6 +1,8 @@
 #!/usr/bin/python
 from evt_framework import *
 from std_feeds import *
+# from valgo.evt_generator.utilities.trade_status_evt_generator import TradeStatusEvtGenerator
+
 from datetime import datetime, time, timedelta
 import numpy as np
 from talib import ULTOSC
@@ -98,6 +100,14 @@ class SampleEvtGenerator(EvtGenerator):
                             del self._high[md.productCode]
                             del self._low[md.productCode]
                             del self._close[md.productCode]
+
+                            # -------------------- calculate pnl at the end of the day --------------------
+                            self.calculatePNL(md.productCode, day_end_time, float(md.lastPrice))
+                            # ts = self._ts.get_current_trade_status()
+                            # print ts.get_product_codes()
+                            # print ts.get_all_product_positions()
+                            # print ts['total_pnl']
+                            # -----------------------------------------------------------------------------
                         else:
                             if current_time.time() == end_time:
                                 del self._ohlcv[md.productCode]
@@ -264,9 +274,61 @@ class SampleEvtGenerator(EvtGenerator):
 
 
         def on_tradefeed(self, tf):
+                if tf.productCode not in self.day_tradelog:
+                    self.day_tradelog[tf.productCode] = [[0,0],[0,0]]
+                self.day_tradelog[tf.productCode][tf.buySell-1][0] += int(tf.volumeFilled)
+                self.day_tradelog[tf.productCode][tf.buySell-1][1] += int(tf.volumeFilled) * float(tf.price)
+                # self.day_tradelog[tf.productCode].append(tf)
 
                 # ['__doc__', '__init__', '__module__', 'buySell', 'deleted', 'errorDescription', 'market', 'orderID', 'price', 'productCode', 'source', 'status', 'timestamp', 'tradeID', 'volume', 'volumeFilled']
-                print "tf:" + str(tf.price)
+                # print "tf:" + str(tf.price)
+                print 'trade feed,' + str(tf.productCode) + ',' + str(tf.volumeFilled) + ',' + str(tf.price)
+
+
+        def calculatePNL(product, dt, lastPrice):
+            # if product not in self.all_pnl:
+            #     self.all_pnl[product] = []
+            if product not in self.day_tradelog:
+                print ','.join(map(str, [product, 0, 0.0, 0.0]))
+            else:
+                [buy_size, buy_cashflow] = self.day_tradelog[tf.productCode][0]
+                [sell_size, sell_cashflow] = self.day_tradelog[tf.productCode][1]
+                if product in self.position:
+                    [position_old, positionprice_avg] = self.position[product]
+                    if position_old > 0:
+                        buy_size += position_old
+                        buy_cashflow += position_old * positionprice_avg
+                        # buyprice_avg = (buy_cashflow + position_old * positionprice_avg) / buy_size
+                    if position_old < 0:
+                        sell_size += abs(position_old)
+                        sell_cashflow += abs(position_old) * positionprice_avg)
+                        # sellprice_avg = (sell_cashflow + abs(position_old) * positionprice_avg) / sell_size
+                if buy_size == 0:
+                    buyprice_avg = 0.0
+                else:
+                    buyprice_avg = buy_cashflow/buy_size
+                if sell_size == 0:
+                    sellprice_avg = 0.0
+                else:
+                    sellprice_avg = sell_cashflow/sell_size
+                realized = min(buy_size, sell_size) * (sellprice_avg-buyprice_avg)
+                position = buy_size - sell_size
+                
+                if position == 0:
+                    unrealized = 0.0
+                    self.position[product] = [0, 0.0]
+                else:
+                    if position > 0:
+                        unrealized = position * (lastPrice - buyprice_avg)
+                    if position < 0:
+                        unrealized = position * (lastPrice - sellprice_avg)
+                    self.position[product] = [position, (sell_cashflow-buy_cashflow) / abs(position)]
+                print ','.join(map(str, [product, position, realized, unrealized]))
+
+            # self.all_pnl.append([dt, self.position[product], realized, unrealized])
+
+
+
         
         def start(self):
                 print "SampleEvtGenerator.start()"
@@ -282,7 +344,14 @@ class SampleEvtGenerator(EvtGenerator):
                 # ------------- sell parameters -----------------
                 self.sell_flag = {}
                 self.uohigh_s, self.uolow_s, self.price_s = {}, {}, {}
-                
+
+                # ------------- pnl variables -----------------
+                self.day_tradelog = {}
+                # self.all_pnl = {}
+                self.position = {}
+
+                # self._ts = TradeStatusEvtGenerator(self.m_evt_mgr)
+
                 
                 #self._latest_md_price = {}
                 #self._latest_md_vol = {}
