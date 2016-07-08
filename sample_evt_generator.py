@@ -13,8 +13,11 @@ avg1 = 7
 avg2 = 2*avg1
 avg3 = 2*avg2
 
-start_time = time(9,15)
-end_time = time(16)
+# trading hours: two periods, 9:15 - 12:00, 13:00 - 16:00
+tradingHours = [ [time(9,15), time(12)], [time(13), time(16)] ]
+day_start_time = tradingHours[0][0]
+day_end_time = tradingHours[-1][1]
+
 # -------------------- End ----------------------
 
 
@@ -26,30 +29,42 @@ class SampleEvtGenerator(EvtGenerator):
         def on_marketdatafeed(self, md):
                 # from md.timestamp to datetime structure as current_time
                 current_time = datetime(int(md.timestamp[:4]), int(md.timestamp[4:6]),  int(md.timestamp[6:8]), int(md.timestamp[9:11]),  int(md.timestamp[11:13]),  int(md.timestamp[13:15]))
-                if current_time.time() > end_time or current_time.time() < start_time:
+
+                # is current_time in trading hours?
+                flag = 0
+                for period in tradingHours:
+                    start_time = period[0]
+                    end_time = period[1]
+                    # current_time is in the period, set flag to 1
+                    if current_time.time() >= start_time and current_time.time() <= end_time:
+                        flag = 1
+                        break
+                if flag == 0:
                     return
+
                 if md.productCode not in self._ohlcv:
-                    # combine date with start_time
-                    this_interval = datetime.combine(current_time.date(), start_time)
-                    next_interval = this_interval + timedelta(minutes = self.OHLCV_length)
-                    # find time interval of current_time
-                    # if current_time < earlist time interval, break
-                    # else create an entry in self._ohlcv for the productCode
-                    while True:
-                        if current_time >= this_interval and current_time < next_interval:
-                            self._ohlcv[md.productCode] = [
-                                this_interval,
-                                md.lastPrice,
-                                md.lastPrice,
-                                md.lastPrice,
-                                md.lastPrice
-                            ]
-                            break
-                        elif current_time >= next_interval:
-                            this_interval = next_interval
-                            next_interval = this_interval + timedelta(minutes = self.OHLCV_length)
-                        else:
-                            break
+                    if current_time.time() != end_time:
+                        # combine date with start_time
+                        this_interval = datetime.combine(current_time.date(), start_time)
+                        next_interval = this_interval + timedelta(minutes = self.OHLCV_length)
+                        # find time interval of current_time
+                        # if current_time < earlist time interval, break
+                        # else create an entry in self._ohlcv for the productCode
+                        while True:
+                            if current_time >= this_interval and current_time < next_interval:
+                                self._ohlcv[md.productCode] = [
+                                    this_interval,
+                                    md.lastPrice,
+                                    md.lastPrice,
+                                    md.lastPrice,
+                                    md.lastPrice
+                                ]
+                                break
+                            elif current_time >= next_interval:
+                                this_interval = next_interval
+                                next_interval = this_interval + timedelta(minutes = self.OHLCV_length)
+                            else:
+                                break
                 else:
                     # get timestamp of current ohlc
                     this_interval = self._ohlcv[md.productCode][0]
@@ -78,22 +93,28 @@ class SampleEvtGenerator(EvtGenerator):
                             del self._close[md.productCode][0]
                         if len(self._high[md.productCode]) == avg3+1:
                             self.calculateUO(md)
-                        if current_time.time() == end_time:
+                        if current_time.time() == day_end_time:
                             del self._ohlcv[md.productCode]
+                            del self._high[md.productCode]
+                            del self._low[md.productCode]
+                            del self._close[md.productCode]
                         else:
+                            if current_time.time() == end_time:
+                                del self._ohlcv[md.productCode]
                             # find the new this interval
-                            while True:
-                                this_interval += timedelta(minutes = self.OHLCV_length)
-                                if (current_time - this_interval).seconds < 60 * self.OHLCV_length:
-                                    # reset the ohlcv of productCode
-                                    self._ohlcv[md.productCode] = [
-                                        this_interval,
-                                        md.lastPrice,
-                                        md.lastPrice,
-                                        md.lastPrice,
-                                        md.lastPrice
-                                    ]
-                                    break
+                            else:
+                                while True:
+                                    this_interval += timedelta(minutes = self.OHLCV_length)
+                                    if (current_time - this_interval).seconds < 60 * self.OHLCV_length:
+                                        # reset the ohlcv of productCode
+                                        self._ohlcv[md.productCode] = [
+                                            this_interval,
+                                            md.lastPrice,
+                                            md.lastPrice,
+                                            md.lastPrice,
+                                            md.lastPrice
+                                        ]
+                                        break
 
 
                 #print "SampleEvtGenerator..on_marketdatafeed called:" + str(md.timestamp) + " "  + str(md.lastPrice) + " " + str(md.lastVolume)
