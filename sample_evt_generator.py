@@ -107,10 +107,28 @@ class SampleEvtGenerator(EvtGenerator):
                             del self._close[md.productCode]
 
                             # -------------------- calculate pnl at the end of the day --------------------
-                            self.calculatePNL(md.productCode, current_time.date(), float(md.lastPrice))
+                            # self.calculatePNL(md.productCode, current_time.date(), float(md.lastPrice))
+                            '''
+                            ['_MutableMapping__marker', '__abstractmethods__', '__class__', '__contains__', 
+                            '__delattr__', '__delitem__', '__dict__', '__doc__', '__eq__', '__format__', '__getattribute__', 
+                            '__getitem__', '__hash__', '__init__', '__iter__', '__keytransform__', '__len__', '__metaclass__', 
+                            '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', 
+                            '__setitem__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_abc_cache', 
+                            '_abc_negative_cache', '_abc_negative_cache_version', '_abc_registry', '_enable_update_risk', 
+                            '_product_ts', '_refresh_realized_risk_status', '_refresh_total_risk_status', 
+                            '_refresh_unrealized_risk_status', '_status', 'clear', 'clear_pnl', 'enable_auto_update_risk_status', 
+                            'get', 'get_all_product_positions', 'get_all_product_trade_status', 'get_product_codes', 
+                            'get_product_positions', 'get_product_trade_status', 'items', 'iteritems', 'iterkeys', 
+                            'itervalues', 'keys', 'pop', 'popitem', 'setdefault', 'update', 'update_product_trade_status', 
+                            'update_timestamp', 'values']
+                            '''
                             ts = self._ts.get_current_trade_status()
-                            print ts.get_all_product_positions()
-                            print ','.join(map(str, ['pnl_fai'] + ts.get_product_codes() + [current_time.strftime('%Y%m%d'), ts['total_pnl']]))
+                            positioninfo = ts.get_product_positions(md.productCode)
+                            tradeinfo = ts.get_product_trade_status(md.productCode)
+                            print positioninfo
+                            print ','.join(map(str, ['pnl', md.productCode, current_time.strftime('%Y%m%d'), \
+                                positioninfo['1'], positioninfo['-1'], positioninfo['1'] + positioninfo['-1'], \
+                                tradeinfo['realized_pnl'], tradeinfo['unrealized_pnl'], tradeinfo['transaction_cost']]))
                             # -----------------------------------------------------------------------------
                         else:
                             if current_time.time() == end_time:
@@ -130,40 +148,6 @@ class SampleEvtGenerator(EvtGenerator):
                                         ]
                                         break
 
-
-                #print "SampleEvtGenerator..on_marketdatafeed called:" + str(md.timestamp) + " "  + str(md.lastPrice) + " " + str(md.lastVolume)
-                '''
-                self._latest_md_price[md.productCode] = md.lastPrice
-                self._latest_md_vol[md.productCode] = md.lastVolume
-
-
-
-                if self._latest_md_vol[md.productCode] > 10:
-                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
-                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
-
-                                        "SimulationMarket", \
-
-                                        md.productCode, \
-                                        
-                                        "oid_" +  md.timestamp, \
-
-                                        md.lastPrice, \
-
-                                        int(md.lastVolume), \
-
-                                        "open", \
-
-                                        1, \
-
-                                        "insert", \
-
-                                        "limit_order", \
-
-                                        "today", \
-
-                                        ""))))
-                '''
         def calculateUO(self, md):
             product = md.productCode
             uo = ULTOSC(np.array(self._high[product]), np.array(self._low[product]), np.array(self._close[product]), avg1, avg2, avg3)[-1]
@@ -183,9 +167,9 @@ class SampleEvtGenerator(EvtGenerator):
                 self.uolow_b[product] = uo
                 self.price_b[product] = self._low[product][-1]
             elif self.buy_flag[product] == 1 and uo < lowlevel:
+                self.uohigh_b[product] = max(self.uohigh_b[product], uo)
                 self.uolow_b[product] = min(self.uolow_b[product], uo)
                 self.price_b[product] = min(self.price_b[product], self._low[product][-1])
-                self.uohigh_b[product] = uo
             elif self.buy_flag[product] == 1 and uo >= lowlevel:
                 self.buy_flag[product] = 2
             # step 2: bullish Divergence forms meaning price forms a lower low while UO makes a higher lower
@@ -202,18 +186,10 @@ class SampleEvtGenerator(EvtGenerator):
                     del self.buy_flag[product]
                 else:
                     if uo > self.uohigh_b[product]:
-                        '''
-                        if product not in self.buy_signal:
-                            self.buy_signal[product] = []
-                        self.buy_signal[product].append([md.timestamp, 'b'])
-                        '''
-
-                        # print 'Buy:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
                         if self.position[product] >= 0:
                             size = ordersize
                         else:
                             size = abs(self.position[product]) + ordersize
-
                         print 'buy' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
                         self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
                                                         SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
@@ -256,8 +232,8 @@ class SampleEvtGenerator(EvtGenerator):
 
             elif self.sell_flag == 1 and uo > highlevel:
                 self.uohigh_s[product] = max(self.uohigh_s[product], uo)
+                self.uolow_s[product] = min(self.uolow_s[product], uo)
                 self.price_s[product] = max(self.price_s[product], self._high[product][-1])
-                self.uolow_s[product] = uo
             elif self.sell_flag[product] == 1 and uo <= highlevel:
                 self.sell_flag[product] = 2
             
@@ -275,13 +251,6 @@ class SampleEvtGenerator(EvtGenerator):
                     del self.sell_flag[product]
                 else:
                     if uo < self.uolow_s[product]:
-                        '''
-                        if product not in self.sell_signal:
-                            self.sell_signal[product] = []
-                        self.sell_signal[product].append([md.timestamp, 's'])
-                        '''
-
-                        # print 'Sell:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
                         if self.position[product] <= 0:
                             size = ordersize
                         else:
@@ -328,17 +297,16 @@ class SampleEvtGenerator(EvtGenerator):
 
 
         def on_tradefeed(self, tf):
-                if tf.productCode not in self.day_tradelog:
-                    self.day_tradelog[tf.productCode] = [[0,0],[0,0]]
-                self.day_tradelog[tf.productCode][tf.buySell-1][0] += int(tf.volumeFilled)
-                self.day_tradelog[tf.productCode][tf.buySell-1][1] += int(tf.volumeFilled) * float(tf.price)
-                # self.day_tradelog[tf.productCode].append(tf)
-                # if tf.productCode not in self.position:
-                #     self.position[tf.productCode] = 0
+                '''
+                if tf.productCode not in self.tradelog:
+                    self.tradelog[tf.productCode] = [[0,0],[0,0]]
+                self.tradelog[tf.productCode][tf.buySell-1][0] += int(tf.volumeFilled)
+                self.tradelog[tf.productCode][tf.buySell-1][1] += int(tf.volumeFilled) * float(tf.price)
                 if tf.buySell == 1:
                     self.position[tf.productCode] += tf.volumeFilled
                 if tf.buySell == 2:
                     self.position[tf.productCode] -= tf.volumeFilled
+                '''
 
                 # ['__doc__', '__init__', '__module__', 'buySell', 'deleted', 'errorDescription', 'market', 'orderID', 'price', 'productCode', 'source', 'status', 'timestamp', 'tradeID', 'volume', 'volumeFilled']
                 # print "tf:" + str(tf.price)
@@ -346,13 +314,15 @@ class SampleEvtGenerator(EvtGenerator):
                 print ','.join(map(str, ['tradefeed', tf.productCode, tf.timestamp, tf.buySell, tf.volumeFilled, tf.price]))
 
 
+        # not used
+        '''
         def calculatePNL(self, product, dt, lastPrice):
             # if product not in self.all_pnl:
             #     self.all_pnl[product] = []
-            if product not in self.day_tradelog:
-                self.day_tradelog[product]= [[0,0.0], [0,0.0]]
-            [buy_size, buy_cashflow] = self.day_tradelog[product][0]
-            [sell_size, sell_cashflow] = self.day_tradelog[product][1]
+            if product not in self.tradelog:
+                self.tradelog[product]= [[0,0.0], [0,0.0]]
+            [buy_size, buy_cashflow] = self.tradelog[product][0]
+            [sell_size, sell_cashflow] = self.tradelog[product][1]
             if product in self.day_position:
                 [position_old, positionprice_avg] = self.day_position[product]
                 if position_old > 0:
@@ -384,9 +354,10 @@ class SampleEvtGenerator(EvtGenerator):
                     unrealized = position * (lastPrice - sellprice_avg)
                 self.day_position[product] = [position, (sell_cashflow-buy_cashflow) / abs(position)]
             print ','.join(map(str, ['pnl', product, dt.strftime('%Y%m%d'), position, realized, unrealized, realized + unrealized]))
-            del self.day_tradelog[product]
+            del self.tradelog[product]
 
             # self.all_pnl.append([dt, self.day_position[product], realized, unrealized])
+        '''# 
 
         
         def start(self):
@@ -414,14 +385,7 @@ class SampleEvtGenerator(EvtGenerator):
 
 
 
-
-
                 # ------------- pnl variables -----------------
-                self.day_tradelog = {}
-                self.day_position = {}
-
                 self._ts = TradeStatusEvtGenerator(self.m_evt_mgr)
-
-                
-                #self._latest_md_price = {}
-                #self._latest_md_vol = {}
+                # self.tradelog = {}
+                # self.day_position = {}
