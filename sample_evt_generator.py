@@ -5,7 +5,7 @@ from valgo.evt_generator.utilities.trade_status_evt_generator import TradeStatus
 
 from datetime import datetime, time, timedelta
 import numpy as np
-from talib import ULTOSC
+from talib import ULTOSC, MOM
 
 # -------------- UO Parameters ------------------
 lowlevel = 30
@@ -188,37 +188,39 @@ class SampleEvtGenerator(EvtGenerator):
                     del self.buy_flag[product]
                 else:
                     if uo > self.uohigh_b[product]:
-                        if self.position[product] >= 0:
-                            size = ordersize
-                        else:
-                            size = abs(self.position[product]) + ordersize
-                        print 'buy' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
-                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
-                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
+                        m = self.calculateM(md)
+                        if m <= 0:
+                            if self.position[product] >= 0:
+                                size = ordersize
+                            else:
+                                size = abs(self.position[product]) + ordersize
+                            print 'buy' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
+                            self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
+                                                            SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
 
-                                        "SimulationMarket", \
+                                            "SimulationMarket", \
 
-                                        md.productCode, \
-                                            
-                                        "oid_" +  md.timestamp, \
+                                            md.productCode, \
+                                                
+                                            "oid_" +  md.timestamp, \
 
-                                        md.lastPrice, \
+                                            md.lastPrice, \
 
-                                        # int(md.lastVolume), \
-                                        size, \
+                                            # int(md.lastVolume), \
+                                            size, \
 
-                                        "open", \
+                                            "open", \
 
-                                        1, \
+                                            1, \
 
-                                        "insert", \
+                                            "insert", \
 
-                                        "limit_order", \
+                                            "limit_order", \
 
-                                        "today", \
+                                            "today", \
 
-                                        ""))))
-                        # reset flag and parameters
+                                            ""))))
+                            # reset flag and parameters
                         del self.buy_flag[product]
             else:
                 pass
@@ -253,36 +255,38 @@ class SampleEvtGenerator(EvtGenerator):
                     del self.sell_flag[product]
                 else:
                     if uo < self.uolow_s[product]:
-                        if self.position[product] <= 0:
-                            size = ordersize
-                        else:
-                            size = abs(self.position[product]) + ordersize
-                        print 'sell' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
-                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
-                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
+                        m = self.calculateM(md)
+                        if m >= 0:
+                            if self.position[product] <= 0:
+                                size = ordersize
+                            else:
+                                size = abs(self.position[product]) + ordersize
+                            print 'sell' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
+                            self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
+                                                            SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
 
-                                        "SimulationMarket", \
+                                            "SimulationMarket", \
 
-                                        md.productCode, \
-                                            
-                                        "oid_" +  md.timestamp, \
+                                            md.productCode, \
+                                                
+                                            "oid_" +  md.timestamp, \
 
-                                        md.lastPrice, \
+                                            md.lastPrice, \
 
-                                        # int(md.lastVolume), \
-                                        size, \
+                                            # int(md.lastVolume), \
+                                            size, \
 
-                                        "open", \
+                                            "open", \
 
-                                        2, \
+                                            2, \
 
-                                        "insert", \
+                                            "insert", \
 
-                                        "limit_order", \
+                                            "limit_order", \
 
-                                        "today", \
+                                            "today", \
 
-                                        ""))))
+                                            ""))))
                         # reset flag and parameters
                         del self.sell_flag[product]
             else:
@@ -291,7 +295,7 @@ class SampleEvtGenerator(EvtGenerator):
         
 
         def calculateM(self, md):
-            pass
+            return MOM(np.array(self._close[md.productCode]),avg3)[-1]
 
 
         def calculateCV(self, md):
