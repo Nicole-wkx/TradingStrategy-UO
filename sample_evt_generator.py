@@ -25,6 +25,7 @@ day_end_time = tradingHours[-1][1]
 
 # -------------- Order Parameters ----------------
 ordersize = 1
+# -------------------- End ----------------------
 
 
 class SampleEvtGenerator(EvtGenerator):
@@ -107,9 +108,9 @@ class SampleEvtGenerator(EvtGenerator):
 
                             # -------------------- calculate pnl at the end of the day --------------------
                             self.calculatePNL(md.productCode, current_time.date(), float(md.lastPrice))
-                            # ts = self._ts.get_current_trade_status()
-                            # print ts.get_all_product_positions()
-                            # print ','.join(map(str, ['pnl'] + ts.get_product_codes() + [current_time.strftime('%Y%m%d'), ts['total_pnl']]))
+                            ts = self._ts.get_current_trade_status()
+                            print ts.get_all_product_positions()
+                            print ','.join(map(str, ['pnl_fai'] + ts.get_product_codes() + [current_time.strftime('%Y%m%d'), ts['total_pnl']]))
                             # -----------------------------------------------------------------------------
                         else:
                             if current_time.time() == end_time:
@@ -182,64 +183,67 @@ class SampleEvtGenerator(EvtGenerator):
                 self.uolow_b[product] = uo
                 self.price_b[product] = self._low[product][-1]
             elif self.buy_flag[product] == 1 and uo < lowlevel:
-                if uo < self.uolow_b[product]:
-                    self.uolow_b[product] = uo
+                self.uolow_b[product] = min(self.uolow_b[product], uo)
+                self.price_b[product] = min(self.price_b[product], self._low[product][-1])
                 self.uohigh_b[product] = uo
-                self.price_b[product] = self._low[product][-1]
-            # step 2: bullish Divergence forms meaning price forms a lower low while UO makes a higher lower
             elif self.buy_flag[product] == 1 and uo >= lowlevel:
                 self.buy_flag[product] = 2
+            # step 2: bullish Divergence forms meaning price forms a lower low while UO makes a higher lower
             elif self.buy_flag[product] == 2:
-                if uo < lowlevel:
+                if uo < lowlevel or uo > highlevel:
                     del self.buy_flag[product]
                 else:
                     if self._low[product][-1] < self.price_b[product]:
                         self.buy_flag[product] = 3
-                    if uo > self.uohigh_b[product]:
-                        self.uohigh_b[product] = uo
+                    self.uohigh_b[product] = max(self.uohigh_b[product], uo)
             # step 3: UO breaks above the high of the Divergence
-            else:
-                if self.buy_flag[product] == 3 and uo > self.uohigh_b[product]:
-                    '''
-                    if product not in self.buy_signal:
-                        self.buy_signal[product] = []
-                    self.buy_signal[product].append([md.timestamp, 'b'])
-                    '''
-
-                    # print 'Buy:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
-                    if self.position[product] >= 0:
-                        size = ordersize
-                    else:
-                        size = abs(self.position[product]) + ordersize
-
-                    print 'buy' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
-                    self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
-                                                    SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
-
-                                    "SimulationMarket", \
-
-                                    md.productCode, \
-                                        
-                                    "oid_" +  md.timestamp, \
-
-                                    md.lastPrice, \
-
-                                    # int(md.lastVolume), \
-                                    size, \
-
-                                    "open", \
-
-                                    1, \
-
-                                    "insert", \
-
-                                    "limit_order", \
-
-                                    "today", \
-
-                                    ""))))
-                    # reset flag and parameters
+            elif self.buy_flag[product] == 3:
+                if uo < lowlevel or uo > highlevel:
                     del self.buy_flag[product]
+                else:
+                    if uo > self.uohigh_b[product]:
+                        '''
+                        if product not in self.buy_signal:
+                            self.buy_signal[product] = []
+                        self.buy_signal[product].append([md.timestamp, 'b'])
+                        '''
+
+                        # print 'Buy:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
+                        if self.position[product] >= 0:
+                            size = ordersize
+                        else:
+                            size = abs(self.position[product]) + ordersize
+
+                        print 'buy' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
+                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
+                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
+
+                                        "SimulationMarket", \
+
+                                        md.productCode, \
+                                            
+                                        "oid_" +  md.timestamp, \
+
+                                        md.lastPrice, \
+
+                                        # int(md.lastVolume), \
+                                        size, \
+
+                                        "open", \
+
+                                        1, \
+
+                                        "insert", \
+
+                                        "limit_order", \
+
+                                        "today", \
+
+                                        ""))))
+                        # reset flag and parameters
+                        del self.buy_flag[product]
+            else:
+                pass
 
 
             # sell signal
@@ -251,64 +255,67 @@ class SampleEvtGenerator(EvtGenerator):
                 self.price_s[product] = self._high[product][-1]
 
             elif self.sell_flag == 1 and uo > highlevel:
-                if uo > self.uohigh_s[product]:
-                    self.uohigh_s[product] = uo
+                self.uohigh_s[product] = max(self.uohigh_s[product], uo)
+                self.price_s[product] = max(self.price_s[product], self._high[product][-1])
                 self.uolow_s[product] = uo
-                self.price_s[product] = self._high[product][-1]
             elif self.sell_flag[product] == 1 and uo <= highlevel:
                 self.sell_flag[product] = 2
             
             # step 2: bearish Divergence forms meaning price forms a higher high while UO makes a lower high
             elif self.sell_flag[product] == 2:
-                if uo > highlevel:
+                if uo > highlevel or uo < lowlevel:
                     del self.sell_flag[product]
                 else:
                     if self._high[product][-1] > self.price_s[product]:
                         self.sell_flag[product] = 3
-                    if uo < self.uolow_s[product]:
-                        self.uolow_s[product] = uo
+                    self.uolow_s[product] = min(self.uolow_s[product], uo)
             # step 3: UO breaks below the low of the Divergence
-            else:
-                if self.sell_flag[product] == 3 and uo < self.uolow_s[product]:
-                    '''
-                    if product not in self.sell_signal:
-                        self.sell_signal[product] = []
-                    self.sell_signal[product].append([md.timestamp, 's'])
-                    '''
-
-                    # print 'Sell:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
-                    if self.position[product] <= 0:
-                        size = ordersize
-                    else:
-                        size = abs(self.position[product]) + ordersize
-                    print 'sell' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
-                    self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
-                                                    SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
-
-                                    "SimulationMarket", \
-
-                                    md.productCode, \
-                                        
-                                    "oid_" +  md.timestamp, \
-
-                                    md.lastPrice, \
-
-                                    # int(md.lastVolume), \
-                                    size, \
-
-                                    "open", \
-
-                                    2, \
-
-                                    "insert", \
-
-                                    "limit_order", \
-
-                                    "today", \
-
-                                    ""))))
-                    # reset flag and parameters
+            elif self.sell_flag[product] == 3:
+                if uo > highlevel or uo < lowlevel:
                     del self.sell_flag[product]
+                else:
+                    if uo < self.uolow_s[product]:
+                        '''
+                        if product not in self.sell_signal:
+                            self.sell_signal[product] = []
+                        self.sell_signal[product].append([md.timestamp, 's'])
+                        '''
+
+                        # print 'Sell:', product, '  ', md.timestamp, '  price:', md.lastPrice, '  volume:', md.lastVolume
+                        if self.position[product] <= 0:
+                            size = ordersize
+                        else:
+                            size = abs(self.position[product]) + ordersize
+                        print 'sell' + ',' + str(product) + ',' + str(md.timestamp) + ',' + str(size) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
+                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
+                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
+
+                                        "SimulationMarket", \
+
+                                        md.productCode, \
+                                            
+                                        "oid_" +  md.timestamp, \
+
+                                        md.lastPrice, \
+
+                                        # int(md.lastVolume), \
+                                        size, \
+
+                                        "open", \
+
+                                        2, \
+
+                                        "insert", \
+
+                                        "limit_order", \
+
+                                        "today", \
+
+                                        ""))))
+                        # reset flag and parameters
+                        del self.sell_flag[product]
+            else:
+                pass
 
         
 
@@ -376,7 +383,7 @@ class SampleEvtGenerator(EvtGenerator):
                 if position < 0:
                     unrealized = position * (lastPrice - sellprice_avg)
                 self.day_position[product] = [position, (sell_cashflow-buy_cashflow) / abs(position)]
-            print ','.join(map(str, ['pnl', product, dt.strftime('%Y%m%d'), position, realized, unrealized]))
+            print ','.join(map(str, ['pnl', product, dt.strftime('%Y%m%d'), position, realized, unrealized, realized + unrealized]))
             del self.day_tradelog[product]
 
             # self.all_pnl.append([dt, self.day_position[product], realized, unrealized])
@@ -411,7 +418,6 @@ class SampleEvtGenerator(EvtGenerator):
 
                 # ------------- pnl variables -----------------
                 self.day_tradelog = {}
-                # self.all_pnl = {}
                 self.day_position = {}
 
                 self._ts = TradeStatusEvtGenerator(self.m_evt_mgr)
