@@ -105,6 +105,8 @@ class SampleEvtGenerator(EvtGenerator):
                             del self._high[md.productCode]
                             del self._low[md.productCode]
                             del self._close[md.productCode]
+                            del self.buy_flag[md.productCode]
+                            del self.sell_flag[md.productCode]
 
                             # -------------------- calculate pnl at the end of the day --------------------
                             # self.calculatePNL(md.productCode, current_time.date(), float(md.lastPrice))
