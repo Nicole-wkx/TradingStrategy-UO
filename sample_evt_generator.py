@@ -5,7 +5,7 @@ from valgo.evt_generator.utilities.trade_status_evt_generator import TradeStatus
 
 from datetime import datetime, time, timedelta
 import numpy as np
-from talib import ULTOSC, MOM
+from talib import ULTOSC, MOM, EMA
 
 # -------------- UO Parameters ------------------
 lowlevel = 30
@@ -100,6 +100,7 @@ class SampleEvtGenerator(EvtGenerator):
                             del self._close[md.productCode][0]
                         if len(self._high[md.productCode]) == avg3+1:
                             self.calculateUO(md)
+                            self.calculateCV(md)
                             self.decideOrder(md)
                         if current_time.time() == day_end_time:
                             del self._ohlcv[md.productCode]
@@ -108,7 +109,6 @@ class SampleEvtGenerator(EvtGenerator):
                             del self._close[md.productCode]
                             del self.buy_flag[md.productCode]
                             del self.sell_flag[md.productCode]
-                            del self.order_uo[md.productCode]
 
                             # -------------------- calculate pnl at the end of the day --------------------
                             # self.calculatePNL(md.productCode, current_time.date(), float(md.lastPrice))
@@ -246,10 +246,12 @@ class SampleEvtGenerator(EvtGenerator):
         def calculateM(self, md):
             return MOM(np.array(self._close[md.productCode]),avg3)[-1]
 
+
         def calculateCV(self, md):
-            pass
-
-
+            differ = np.array(self._high[md.productCode]) - np.array(self._low[md.productCode])
+            ma = EMA(differ, avg2)
+            cv = (ma[avg3] - ma[9]) / ma[9] * 100
+            print 'Chaikin Volatility: ' + str(cv)
 
         def decideOrder(self, md):
             if self.order_uo[md.productCode] != 0:
@@ -330,11 +332,11 @@ class SampleEvtGenerator(EvtGenerator):
                     self.tradelog[tf.productCode] = [[0,0],[0,0]]
                 self.tradelog[tf.productCode][tf.buySell-1][0] += int(tf.volumeFilled)
                 self.tradelog[tf.productCode][tf.buySell-1][1] += int(tf.volumeFilled) * float(tf.price)
-                if tf.buySell == 1:
-                    self.position[tf.productCode] += tf.volumeFilled
-                if tf.buySell == 2:
-                    self.position[tf.productCode] -= tf.volumeFilled
                 '''
+                # if tf.buySell == 1:
+                #     self.position[tf.productCode] += tf.volumeFilled
+                # if tf.buySell == 2:
+                #     self.position[tf.productCode] -= tf.volumeFilled
 
                 # ['__doc__', '__init__', '__module__', 'buySell', 'deleted', 'errorDescription', 'market', 'orderID', 'price', 'productCode', 'source', 'status', 'timestamp', 'tradeID', 'volume', 'volumeFilled']
                 # print "tf:" + str(tf.price)
