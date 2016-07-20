@@ -261,7 +261,7 @@ class SampleEvtGenerator(EvtGenerator):
                 if cv == 999999:
                     self.buy_flag[product] = 2
                 else:
-                    if cv < 0:
+                    if cv > 0:
                         print 'buy' + ',' + str(md.productCode) + ',' + str(md.timestamp) + ',' + str(ordersize) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
                         self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
                                                         SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
@@ -298,7 +298,7 @@ class SampleEvtGenerator(EvtGenerator):
                 if cv == 999999:
                     self.sell_flag[product] = 2
                 else:
-                    if cv > 0:
+                    if cv < 0:
                         print 'sell' + ',' + str(md.productCode) + ',' + str(md.timestamp) + ',' + str(ordersize) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
                         self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
                                                         SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
