@@ -16,6 +16,8 @@ avg2 = 2*avg1
 avg3 = 2*avg2
 # -------------------- End ----------------------
 
+cv_period = avg3
+
 # -------------- Market Parameters ------------------
 # trading hours: two periods, 9:15 - 12:00, 13:00 - 16:00
 tradingHours = [ [time(9,15), time(12)], [time(13), time(16)] ]
@@ -94,14 +96,12 @@ class SampleEvtGenerator(EvtGenerator):
                             self._high[md.productCode].append(self._ohlcv[md.productCode][2])
                             self._low[md.productCode].append(self._ohlcv[md.productCode][3])
                             self._close[md.productCode].append(self._ohlcv[md.productCode][4])
-                        while len(self._high[md.productCode]) > avg3+1:
+                        while len(self._high[md.productCode]) > 2*avg3:
                             del self._high[md.productCode][0]
                             del self._low[md.productCode][0]
                             del self._close[md.productCode][0]
-                        if len(self._high[md.productCode]) == avg3+1:
+                        if len(self._high[md.productCode]) >= avg3+1:
                             self.calculateUO(md)
-                            self.calculateCV(md)
-                            self.decideOrder(md)
                         if current_time.time() == day_end_time:
                             del self._ohlcv[md.productCode]
                             del self._high[md.productCode]
@@ -152,6 +152,7 @@ class SampleEvtGenerator(EvtGenerator):
                                         ]
                                         break
 
+        '''
         def calculateUO(self, md):
             product = md.productCode
             uo = ULTOSC(np.array(self._high[product]), np.array(self._low[product]), np.array(self._close[product]), avg1, avg2, avg3)[-1]
@@ -240,6 +241,93 @@ class SampleEvtGenerator(EvtGenerator):
                         del self.sell_flag[product]
             else:
                 pass
+        '''
+
+
+        def calculateUO(self, md):
+            product = md.productCode
+            uo = ULTOSC(np.array(self._high[product]), np.array(self._low[product]), np.array(self._close[product]), avg1, avg2, avg3)[-1]
+            if product not in self.buy_flag:
+                self.buy_flag[product] = 0
+            if product not in self.sell_flag:
+                self.sell_flag[product] = 0
+            if product not in self.position:
+                self.position[product] = 0
+
+            if self.buy_flag[product] == 0 and uo < lowlevel:
+                self.buy_flag[product] = 1
+            if (self.buy_flag[product] == 1 and uo > lowlevel) or self.buy_flag[product]==2:
+                cv = self.calculateCV(md)
+                if cv == 999999:
+                    self.buy_flag[product] = 2
+                else:
+                    if cv < 0:
+                        print 'buy' + ',' + str(md.productCode) + ',' + str(md.timestamp) + ',' + str(ordersize) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
+                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
+                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
+
+                                        "SimulationMarket", \
+
+                                        md.productCode, \
+                                                            
+                                        "oid_" +  md.timestamp, \
+
+                                        md.lastPrice, \
+
+                                        # int(md.lastVolume), \
+                                        ordersize, \
+
+                                        "open", \
+
+                                        1, \
+
+                                        "insert", \
+
+                                        "limit_order", \
+
+                                        "today", \
+
+                                        ""))))
+                    self.buy_flag[product] = 0
+
+
+            if self.sell_flag[product] == 0 and uo > highlevel:
+                self.sell_flag[product] = 1
+            if (self.sell_flag[product] == 1 and uo < highlevel) or self.sell_flag[product]==2:
+                cv = self.calculateCV(md)
+                if cv == 999999:
+                    self.sell_flag[product] = 2
+                else:
+                    if cv > 0:
+                        print 'sell' + ',' + str(md.productCode) + ',' + str(md.timestamp) + ',' + str(ordersize) + ',' + str(md.lastPrice) + ',' + str(md.lastVolume)
+                        self.m_evt_mgr.insertEvt(Evt(1, "final_signalfeed", \
+                                                        SignalFeed("{},signalfeed,{},{},{},{},{},{},{},{},{},{}".format(md.timestamp, \
+
+                                        "SimulationMarket", \
+
+                                        md.productCode, \
+                                                            
+                                        "oid_" +  md.timestamp, \
+
+                                        md.lastPrice, \
+
+                                        # int(md.lastVolume), \
+                                        ordersize, \
+
+                                        "open", \
+
+                                        2, \
+
+                                        "insert", \
+
+                                        "limit_order", \
+
+                                        "today", \
+
+                                        ""))))
+                    self.sell_flag[product] = 0
+
+
 
         
 
@@ -249,10 +337,15 @@ class SampleEvtGenerator(EvtGenerator):
 
         def calculateCV(self, md):
             differ = np.array(self._high[md.productCode]) - np.array(self._low[md.productCode])
-            ma = EMA(differ, avg2)
-            cv = (ma[avg3] - ma[9]) / ma[9] * 100
+            ma = EMA(differ, timeperiod=cv_period)
+            if len(ma) == cv_period * 2:
+                cv = (ma[-1] - ma[-1-cv_period]) / ma[-1-cv_period] *100
+            else:
+                cv = 999999
+            return cv
             print 'Chaikin Volatility: ' + str(cv)
 
+        '''
         def decideOrder(self, md):
             if self.order_uo[md.productCode] != 0:
                 m = self.calculateM(md)
@@ -324,6 +417,7 @@ class SampleEvtGenerator(EvtGenerator):
                                         "today", \
 
                                         ""))))
+        '''
 
 
         def on_tradefeed(self, tf):
@@ -342,52 +436,6 @@ class SampleEvtGenerator(EvtGenerator):
                 # print "tf:" + str(tf.price)
                 # print 'trade feed,' + str(tf.productCode) + ',' + str(tf.buySell) + ',' + str(tf.volumeFilled) + ',' + str(tf.price)
                 print ','.join(map(str, ['tradefeed', tf.productCode, tf.timestamp, tf.buySell, tf.volumeFilled, tf.price]))
-
-
-        # not used
-        '''
-        def calculatePNL(self, product, dt, lastPrice):
-            # if product not in self.all_pnl:
-            #     self.all_pnl[product] = []
-            if product not in self.tradelog:
-                self.tradelog[product]= [[0,0.0], [0,0.0]]
-            [buy_size, buy_cashflow] = self.tradelog[product][0]
-            [sell_size, sell_cashflow] = self.tradelog[product][1]
-            if product in self.day_position:
-                [position_old, positionprice_avg] = self.day_position[product]
-                if position_old > 0:
-                    buy_size += position_old
-                    buy_cashflow += position_old * positionprice_avg
-                    # buyprice_avg = (buy_cashflow + position_old * positionprice_avg) / buy_size
-                if position_old < 0:
-                    sell_size += abs(position_old)
-                    sell_cashflow += abs(position_old) * positionprice_avg
-                    # sellprice_avg = (sell_cashflow + abs(position_old) * positionprice_avg) / sell_size
-            if buy_size == 0:
-                buyprice_avg = 0.0
-            else:
-                buyprice_avg = buy_cashflow/buy_size
-            if sell_size == 0:
-                sellprice_avg = 0.0
-            else:
-                sellprice_avg = sell_cashflow/sell_size
-            realized = min(buy_size, sell_size) * (sellprice_avg-buyprice_avg)
-            position = buy_size - sell_size
-                
-            if position == 0:
-                unrealized = 0.0
-                self.day_position[product] = [0, 0.0]
-            else:
-                if position > 0:
-                    unrealized = position * (lastPrice - buyprice_avg)
-                if position < 0:
-                    unrealized = position * (lastPrice - sellprice_avg)
-                self.day_position[product] = [position, (sell_cashflow-buy_cashflow) / abs(position)]
-            print ','.join(map(str, ['pnl', product, dt.strftime('%Y%m%d'), position, realized, unrealized, realized + unrealized]))
-            del self.tradelog[product]
-
-            # self.all_pnl.append([dt, self.day_position[product], realized, unrealized])
-        '''# 
 
         
         def start(self):
