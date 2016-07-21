@@ -96,7 +96,7 @@ class SampleEvtGenerator(EvtGenerator):
                             self._high[md.productCode].append(self._ohlcv[md.productCode][2])
                             self._low[md.productCode].append(self._ohlcv[md.productCode][3])
                             self._close[md.productCode].append(self._ohlcv[md.productCode][4])
-                        while len(self._high[md.productCode]) > 2*avg3:
+                        while len(self._high[md.productCode]) > 2*cv_period:
                             del self._high[md.productCode][0]
                             del self._low[md.productCode][0]
                             del self._close[md.productCode][0]
@@ -247,7 +247,7 @@ class SampleEvtGenerator(EvtGenerator):
         def calculateUO(self, md):
             product = md.productCode
             uo = ULTOSC(np.array(self._high[product]), np.array(self._low[product]), np.array(self._close[product]), avg1, avg2, avg3)[-1]
-            print 'uo: ' + str(uo)
+            # print 'uo: ' + str(uo)
             if product not in self.buy_flag:
                 self.buy_flag[product] = 0
             if product not in self.sell_flag:
@@ -351,12 +351,12 @@ class SampleEvtGenerator(EvtGenerator):
         def calculateCV(self, md):
             differ = np.array(self._high[md.productCode]) - np.array(self._low[md.productCode])
             ma = EMA(differ, timeperiod=cv_period)
-            print 'ma:', ma
+            # print 'ma:', ma
             if len(ma) == cv_period * 2:
                 cv = (ma[-1] - ma[-1-cv_period]) / ma[-1-cv_period] *100
             else:
                 cv = 999999
-            print 'cv: ' + str(cv)
+            # print 'cv: ' + str(cv)
             return cv
 
         '''
